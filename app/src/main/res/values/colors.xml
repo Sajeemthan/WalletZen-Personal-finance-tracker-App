@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- New Material Design colors -->
+    <color name="purple_500">#6200EE</color>
+    <color name="purple_700">#3700B3</color>
+    <color name="purple_200">#BB86FC</color>
+    <color name="grn_500">#000000</color>
+    <color name="grn_700">#000000</color>
+    <color name="grn_200">#000000</color>
+    <color name="teal_200">#03DAC5</color>
+    <color name="teal_700">#018786</color>
+    <color name="transparent">#0E957676</color>
+    <!-- Original app colors -->
+    <color name="primary">#E98980</color>
+    <color name="primary_dark">#F25649</color>
+    <color name="primary_light">#C8E6C9</color>
+    <color name="accent">#D66A62</color>
+    <color name="background">#E8F5E9</color>
+    <color name="textPrimary">#212121</color>
+    <color name="button_blue">#FB6B90</color>
+    <color name="button_purple">#FB6B90</color>
+    <color name="button_orange">#FF9800</color>
+    <color name="button_red">#F44336</color>
+    <color name="misty_blue">#B7CFDC</color>
+</resources>

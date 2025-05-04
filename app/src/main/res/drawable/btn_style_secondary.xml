@@ -1,0 +1,13 @@
+<!-- res/drawable/btn_style_secondary.xml -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="45"
+                android:startColor="#F44336"
+            android:endColor="#EF8484"
+            />
+            <corners android:radius="12dp"/>
+        </shape>
+    </item>
+</selector>

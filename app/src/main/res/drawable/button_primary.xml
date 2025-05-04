@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#80AAFFFF">
+    <item>
+        <layer-list>
+            <!-- Shadow -->
+            <item android:right="1dp" android:left="1dp" android:bottom="3dp">
+                <shape>
+                    <solid android:color="#66000000" />
+                    <corners android:radius="12dp"/>
+                </shape>
+            </item>
+            <!-- Button - Using gradient with the two specified colors -->
+            <item android:bottom="3dp">
+                <shape>
+                    <gradient
+                        android:startColor="#B7CFDC"
+                        android:endColor="#738FA7"
+                        android:angle="90" />
+                    <corners android:radius="12dp"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</ripple>

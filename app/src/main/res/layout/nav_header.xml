@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/gradient_top_header"
+    android:orientation="vertical"
+    android:paddingTop="36dp"
+    android:paddingBottom="24dp"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:theme="@style/ThemeOverlay.AppCompat.Dark">
+
+    <!-- App Logo -->
+    <ImageView
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_marginTop="20dp"
+        android:layout_gravity="start"
+        android:layout_marginBottom="8dp"
+        android:contentDescription="@string/navigation_header"
+        android:background="@drawable/circle_shadow"
+        android:src="@drawable/logo2" />
+
+    <!-- App Name -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="WalletZen"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        android:layout_gravity="start" />
+
+    <!-- App Tagline -->
+    <TextView
+        android:id="@+id/textView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/track_save_succeed"
+        android:textColor="#050505"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:layout_gravity="start" />
+
+</LinearLayout>

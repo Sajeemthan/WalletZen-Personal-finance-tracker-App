@@ -1,0 +1,140 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Personal Finance Tracker - Viva Questions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        pre {
+            background-color: #e8e8e8;
+            padding: 10px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            border-left: 4px solid #2980b9;
+        }
+        .question {
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Personal Finance Tracker App - Viva Questions and Answers</h1>
+
+    <div class="question">
+        <h2>1. Where is SharedPreference used in the application?</h2>
+        <p>SharedPreferences is implemented in <code>SharedPrefHelper.kt</code> and used in <code>TransactionActivity.kt</code>, <code>BudgetActivity.kt</code>, and <code>ReminderSettingsActivity.kt</code>.</p>
+        <pre>
+private val prefs: SharedPreferences = context.getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+
+fun saveBudget(amount: Float) {
+    prefs.edit().putFloat("budget", amount).apply()
+}
+
+fun getBudget(): Float {
+    return prefs.getFloat("budget", 0f)
+}
+        </pre>
+    </div>
+
+    <div class="question">
+        <h2>2. Where can we find the CRUD functions for transactions?</h2>
+        <p>Implemented in <code>TransactionActivity.kt</code> and <code>TransactionListActivity.kt</code>.</p>
+        <pre>
+if (editPosition != -1 && editPosition &lt; transactionList.size) {
+    transactionList[editPosition] = transaction
+    Toast.makeText(this, "Transaction Updated ✅", Toast.LENGTH_SHORT).show()
+} else {
+    transactionList.add(transaction)
+    Toast.makeText(this, "Transaction Saved ✅", Toast.LENGTH_SHORT).show()
+}
+val updatedJson = gson.toJson(transactionList)
+sharedPref.edit().putString("transactions", updatedJson).apply()
+        </pre>
+    </div>
+
+    <div class="question">
+        <h2>3. How is the pie chart implemented for expense categories?</h2>
+        <p>Implemented in <code>CategoryChartActivity.kt</code> using MPAndroidChart.</p>
+        <pre>
+val dataSet = PieDataSet(entries, "Category-wise Spending")
+dataSet.colors = ColorTemplate.MATERIAL_COLORS.toList()
+dataSet.valueTextColor = Color.BLACK
+dataSet.valueTextSize = 14f
+        </pre>
+    </div>
+
+    <div class="question">
+        <h2>4. How does the budget tracking mechanism work?</h2>
+        <p>Implemented in <code>BudgetActivity.kt</code>.</p>
+        <pre>
+tvWarning.text = when {
+    budget == 0f -> "⚠️ Budget not set!"
+    percentageUsed &gt; 100 -> "❌ You have exceeded your budget!"
+    percentageUsed &gt; 80 -> "⚠️ You're close to exceeding your budget!"
+    else -> ""
+}
+        </pre>
+    </div>
+
+    <div class="question">
+        <h2>5. How are notifications managed in the app?</h2>
+        <p>Handled by <code>NotificationHelper.kt</code>, <code>ReminderSettingsActivity.kt</code>, <code>ReminderReceiver.kt</code>, and <code>BootReceiver.kt</code>.</p>
+    </div>
+
+    <div class="question">
+        <h2>6. How is data backup implemented using JSON?</h2>
+        <p>Implemented in <code>TransactionActivity.kt</code> using Gson for JSON serialization and SharedPreferences for storage.</p>
+    </div>
+
+    <div class="question">
+        <h2>7. How do you import and export data in the app?</h2>
+        <p>JSON-based import/export to/from SharedPreferences and internal storage using Gson.</p>
+    </div>
+
+    <div class="question">
+        <h2>8. What is the code for checking if the budget is exceeded or close to exceeding?</h2>
+        <pre>
+tvWarning.text = when {
+    budget == 0f -> "⚠️ Budget not set!"
+    percentageUsed &gt; 100 -> "❌ You have exceeded your budget!"
+    percentageUsed &gt; 80 -> "⚠️ You're close to exceeding your budget!"
+    else -> ""
+}
+        </pre>
+    </div>
+
+    <div class="question">
+        <h2>9. How are transaction categories managed?</h2>
+        <p>Categories defined in <code>TransactionActivity.kt</code> using a Spinner adapter.</p>
+    </div>
+
+    <div class="question">
+        <h2>10. How does the reminder system work?</h2>
+        <p>Set in <code>ReminderSettingsActivity.kt</code>, triggered by <code>ReminderReceiver.kt</code>, restored by <code>BootReceiver.kt</code>.</p>
+    </div>
+
+    <div class="question">
+        <h2>11. How is the monthly budget reset implemented?</h2>
+        <p>Implemented in <code>BudgetActivity.kt</code> with <code>btnReset.setOnClickListener</code>.</p>
+    </div>
+
+    <div class="question">
+        <h2>12. How does the app organize its main activities?</h2>
+        <p>MainActivity.kt is the central hub with navigation to all core features.</p>
+    </div>
+
+    <div class="question">
+        <h2>13. How is the transaction date picker implemented?</h2>
+        <p>Implemented using <code>DatePickerDialog</code> in <code>TransactionActivity.kt</code>.</p>
+    </div>
+</body>
+</html>

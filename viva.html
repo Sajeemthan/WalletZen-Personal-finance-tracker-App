@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Finance Tracker App - Viva Questions and Answers</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #3498db;
+            margin-top: 30px;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: Consolas, monospace;
+        }
+        .question {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-top: 20px;
+        }
+        .answer {
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Personal Finance Tracker App - Viva Questions and Answers</h1>
+
+<h2>Shared Preferences Implementation</h2>
+
+<div class="question">1. Where is SharedPreference used in the application and how is it implemented?</div>
+<div class="answer">
+    <p>SharedPreferences is primarily implemented in the <code>SharedPrefHelper.kt</code> class for managing app preferences. Here is the code:</p>
+    <pre><code>// SharedPrefHelper.kt
+package com.example.personalfinancetrackerapp.utils
+
+import android.content.Context
+import android.content.SharedPreferences
+
+class SharedPrefHelper(context: Context) {
+
+    private val prefs: SharedPreferences = context.getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+
+    fun saveBudget(amount: Float) {
+        prefs.edit().putFloat("budget", amount).apply()
+    }
+
+    fun getBudget(): Float {
+        return prefs.getFloat("budget", 0f)
+    }
+
+    fun saveCurrency(currency: String) {
+        prefs.edit().putString("currency", currency).apply()
+    }
+
+    fun getCurrency(): String {
+        return prefs.getString("currency", "$") ?: "$"
+    }
+}</code></pre>
+    <p>SharedPreferences is also used directly in <code>BudgetActivity.kt</code>, <code>TransactionActivity.kt</code>, and <code>ReminderSettingsActivity.kt</code> for storing application data.</p>
+</div>
+
+<h2>CRUD Operations</h2>
+
+<div class="question">2. Where can we find the CRUD functions for transactions?</div>
+<div class="answer">
+    <p>CRUD operations are implemented across several files:</p>
+    
+    <p><strong>Create/Update (in TransactionActivity.kt):</strong></p>
+    <pre><code>// Create or Update a transaction
+saveBtn.setOnClickListener {
+    val title = titleInput.text.toString()
+    val amount = amountInput.text.toString().toDoubleOrNull()
+    val category = categorySpinner.selectedItem.toString()
+    val date = selectedDate
+
+    if (title.isBlank() || amount == null || date.isBlank()) {
+        Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+
+    val transaction = Transaction(
+        id = Random().nextInt(9999),
+        title = title,
+        amount = amount,
+        category = category,
+        date = date
+    )
+
+    // Save or Update in SharedPreferences
+    val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+    val gson = Gson()
+
+    val existingJson = sharedPref.getString("transactions", null)
+    val type = object : TypeToken<MutableList<Transaction>>() {}.type
+    val transactionList: MutableList<Transaction> = if (existingJson != null) {
+        gson.fromJson(existingJson, type)
+    } else {
+        mutableListOf()
+    }
+
+    if (editPosition != -1 && editPosition < transactionList.size) {
+        transactionList[editPosition] = transaction
+        Toast.makeText(this, "Transaction Updated ✅", Toast.LENGTH_SHORT).show()
+    } else {
+        transactionList.add(transaction)
+        Toast.makeText(this, "Transaction Saved ✅", Toast.LENGTH_SHORT).show()
+    }
+
+    val updatedJson = gson.toJson(transactionList)
+    sharedPref.edit().putString("transactions", updatedJson).apply()
+
+    finish()
+}</code></pre>
+
+    <p><strong>Read (in TransactionListActivity.kt and other activities):</strong></p>
+    <pre><code>// Reading transactions from SharedPreferences
+private fun loadTransactions(): List<Transaction> {
+    val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+    val json = prefs.getString("transactions", null)
+    val type = object : TypeToken<List<Transaction>>() {}.type
+    return if (json != null) Gson().fromJson(json, type) else emptyList()
+}</code></pre>
+
+    <p><strong>Delete (in TransactionListActivity.kt):</strong></p>
+    <pre><code>// Delete operation using ItemTouchHelper for swipe-to-delete
+val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+    override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+        return false
+    }
+
+    override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+        val position = viewHolder.adapterPosition
+        
+        val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+        val gson = Gson()
+        val json = sharedPref.getString("transactions", null)
+        val type = object : TypeToken<MutableList<Transaction>>() {}.type
+        val transactionList: MutableList<Transaction> = if (json != null) {
+            gson.fromJson(json, type)
+        } else {
+            mutableListOf()
+        }
+        
+        if (position < transactionList.size) {
+            transactionList.removeAt(position)
+            val updatedJson = gson.toJson(transactionList)
+            sharedPref.edit().putString("transactions", updatedJson).apply()
+            adapter.notifyItemRemoved(position)
+            Toast.makeText(this@TransactionListActivity, "Transaction deleted", Toast.LENGTH_SHORT).show()
+        }
+    }
+})</code></pre>
+</div>
+
+<h2>Pie Chart Visualization</h2>
+
+<div class="question">3. Where is the code for the pie chart implemented?</div>
+<div class="answer">
+    <p>The pie chart for category-wise spending visualization is implemented in <code>CategoryChartActivity.kt</code> using the MPAndroidChart library:</p>
+    <pre><code>// CategoryChartActivity.kt
+private fun setupPieChart(categoryTotals: Map<String, Float>) {
+    val entries = ArrayList<PieEntry>()
+    for ((category, amount) in categoryTotals) {
+        entries.add(PieEntry(amount, category))
+    }
+
+    val dataSet = PieDataSet(entries, "Category-wise Spending")
+    dataSet.colors = ColorTemplate.MATERIAL_COLORS.toList()
+    dataSet.valueTextColor = Color.BLACK
+    dataSet.valueTextSize = 14f
+
+    val data = PieData(dataSet)
+
+    pieChart.data = data
+    pieChart.description.isEnabled = false
+    pieChart.centerText = "Spending by Category"
+    pieChart.setEntryLabelColor(Color.BLACK)
+    pieChart.animateY(1000)
+    pieChart.invalidate()
+}</code></pre>
+
+    <p>This function processes transaction data to create a visual breakdown of spending by category:</p>
+    <pre><code>private fun calculateTotals(transactions: List<Transaction>): Map<String, Float> {
+    val categoryMap = mutableMapOf<String, Float>()
+
+    for (t in transactions) {
+        val current = categoryMap[t.category] ?: 0f
+        categoryMap[t.category] = current + t.amount.toFloat()
+    }
+
+    return categoryMap
+}</code></pre>
+</div>
+
+<h2>Budget Management</h2>
+
+<div class="question">4. How is the budget tracking mechanism implemented? Where is the code that checks if the budget is exceeded?</div>
+<div class="answer">
+    <p>The budget tracking system is implemented in <code>BudgetActivity.kt</code> with the following components:</p>
+    
+    <p><strong>Setting and resetting budget:</strong></p>
+    <pre><code>// Setting budget
+btnSave.setOnClickListener {
+    val input = inputBudget.text.toString().toFloatOrNull()
+    if (input == null || input <= 0) {
+        Toast.makeText(this, "Enter a valid budget", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+    budget = input
+    getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+        .edit().putFloat("budget", budget).apply()
+
+    updateUI()
+    Toast.makeText(this, "Budget Saved ✅", Toast.LENGTH_SHORT).show()
+}
+
+// Resetting budget
+btnReset.setOnClickListener {
+    val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+    prefs.edit().remove("budget").apply()
+    budget = 0f
+    updateUI()
+    Toast.makeText(this, "Budget has been reset", Toast.LENGTH_SHORT).show()
+}</code></pre>
+
+    <p><strong>Checking if budget is exceeded:</strong></p>
+    <pre><code>private fun updateUI() {
+    tvCurrentBudget.text = if (budget == 0f) "No budget set" else "Current Budget: $${"%.2f".format(budget)}"
+    tvTotalSpent.text = "Total Spent: $${"%.2f".format(totalSpent)}"
+
+    val percentageUsed = if (budget > 0) (totalSpent / budget) * 100 else 0f
+    progressBar.progress = percentageUsed.toInt()
+
+    // This code checks if budget is exceeded or close to being exceeded
+    tvWarning.text = when {
+        budget == 0f -> "⚠️ Budget not set!"
+        percentageUsed > 100 -> "❌ You have exceeded your budget!"
+        percentageUsed > 80 -> "⚠️ You're close to exceeding your budget!"
+        else -> ""
+    }
+}</code></pre>
+
+    <p><strong>Calculating total spending:</strong></p>
+    <pre><code>private fun calculateTotalSpent() {
+    val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+    val json = prefs.getString("transactions", null)
+    val type = object : TypeToken<List<Transaction>>() {}.type
+    val transactions: List<Transaction> = if (json != null) Gson().fromJson(json, type) else emptyList()
+    totalSpent = transactions.sumOf { it.amount }.toFloat()
+}</code></pre>
+</div>
+
+<h2>Notification System</h2>
+
+<div class="question">5. What is NotificationHelper.kt and how is it used in the application?</div>
+<div class="answer">
+    <p><code>NotificationHelper.kt</code> is a utility class that manages the creation of notification channels required for Android 8.0 (Oreo) and above. It ensures that notifications can be properly displayed to the user:</p>
+    
+    <pre><code>// NotificationHelper.kt
+package com.example.personalfinancetrackerapp.utils
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.os.Build
+
+object NotificationHelper {
+
+    const val CHANNEL_ID = "budget_alerts"
+
+    fun createNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Budget Alerts"
+            val descriptionText = "Daily reminders for budget tracking"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+                enableVibration(true)
+                enableLights(true)
+            }
+            
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+}</code></pre>
+
+    <p>This helper is used in <code>ReminderReceiver</code> to show notifications and in <code>ReminderSettingsActivity</code> to ensure the channel is created before scheduling reminders.</p>
+</div>
+
+<div class="question">6. What is ReminderReceiver.kt and how does it function?</div>
+<div class="answer">
+    <p><code>ReminderReceiver.kt</code> is a BroadcastReceiver that handles displaying notifications when a scheduled reminder triggers:</p>
+    
+    <pre><code>// ReminderReceiver.kt
+class ReminderReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        // Ensure notification channel exists
+        NotificationHelper.createNotificationChannel(context)
+
+        val builder = NotificationCompat.Builder(context, NotificationHelper.CHANNEL_ID)
+            .setSmallIcon(R.mipmap.logo9715)
+            .setContentTitle("🕗 Daily Reminder")
+            .setContentText("Don't forget to record your expenses today!")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        val notificationManager = NotificationManagerCompat.from(context)
+        
+        // Check notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == 
+                PackageManager.PERMISSION_GRANTED) {
+                notificationManager.notify(1002, builder.build())
+            }
+        } else {
+            // For older Android versions, no need to check permission
+            notificationManager.notify(1002, builder.build())
+        }
+    }
+}</code></pre>
+    
+    <p>It is triggered when an alarm set by <code>ReminderSettingsActivity</code> goes off, and it creates and displays a notification reminding the user to record their expenses.</p>
+</div>
+
+<div class="question">7. What is BootReceiver.kt and why is it important?</div>
+<div class="answer">
+    <p><code>BootReceiver.kt</code> is a BroadcastReceiver that responds to the device boot completed event. Its purpose is to restore scheduled reminders after the device restarts:</p>
+    
+    <pre><code>// BootReceiver.kt
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            // Restore reminders after device restart
+            val prefs = context.getSharedPreferences("ReminderPrefs", Context.MODE_PRIVATE)
+            val hour = prefs.getInt("hour", -1)
+            val minute = prefs.getInt("minute", -1)
+            
+            if (hour != -1 && minute != -1) {
+                // Reschedule the reminder
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val reminderIntent = Intent(context, ReminderReceiver::class.java)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    hour * 60 + minute,
+                    reminderIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                    set(Calendar.SECOND, 0)
+                    if (before(Calendar.getInstance())) {
+                        add(Calendar.DAY_OF_MONTH, 1)
+                    }
+                }
+                
+                // Set the alarm using appropriate method based on Android version
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                    alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setRepeating(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        AlarmManager.INTERVAL_DAY,
+                        pendingIntent
+                    )
+                }
+            }
+        }
+    }
+}</code></pre>
+    
+    <p>It's important because when a device restarts, all scheduled alarms are cleared. This receiver ensures that reminders set by the user are restored after a device reboot, providing a seamless user experience.</p>
+</div>
+
+<h2>Data Import and Export</h2>
+
+<div class="question">8. How are data backup and restore functions implemented?</div>
+<div class="answer">
+    <p>The data backup and restore functions are implemented in <code>MainActivity.kt</code> for exporting and importing transaction data as JSON:</p>
+    
+    <p><strong>Export Data Function:</strong></p>
+    <pre><code>private fun exportData() {
+    try {
+        val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+        val json = sharedPref.getString("transactions", null)
+        
+        if (json == null || json.isEmpty()) {
+            Toast.makeText(this, "No data to export", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val fileName = "finance_backup_${SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())}.json"
+        
+        // Write to internal storage
+        openFileOutput(fileName, Context.MODE_PRIVATE).use {
+            it.write(json.toByteArray())
+        }
+        
+        Toast.makeText(this, "Data exported to $fileName", Toast.LENGTH_LONG).show()
+        
+    } catch (e: Exception) {
+        Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}</code></pre>
+
+    <p><strong>Import Data Function:</strong></p>
+    <pre><code>private fun importData() {
+    try {
+        // Show file picker dialog for backup files
+        val files = filesDir.listFiles { file -> file.name.endsWith(".json") }
+        
+        if (files == null || files.isEmpty()) {
+            Toast.makeText(this, "No backup files found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val fileNames = files.map { it.name }.toTypedArray()
+        
+        AlertDialog.Builder(this)
+            .setTitle("Select Backup File")
+            .setItems(fileNames) { _, which ->
+                try {
+                    val selectedFile = files[which]
+                    
+                    // Read the JSON from the file
+                    val json = selectedFile.readText()
+                    
+                    // Validate JSON structure
+                    val type = object : TypeToken<List<Transaction>>() {}.type
+                    Gson().fromJson<List<Transaction>>(json, type)
+                    
+                    // Store in SharedPreferences
+                    getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("transactions", json)
+                        .apply()
+                    
+                    Toast.makeText(this, "Data imported successfully", Toast.LENGTH_SHORT).show()
+                    
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        
+    } catch (e: Exception) {
+        Toast.makeText(this, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}</code></pre>
+</div>
+
+<h2>Reminder System</h2>
+
+<div class="question">9. How is the reminder system implemented in ReminderSettingsActivity.kt?</div>
+<div class="answer">
+    <p><code>ReminderSettingsActivity.kt</code> allows users to set daily reminders for expense tracking. Here's how reminders are scheduled:</p>
+    
+    <pre><code>// ReminderSettingsActivity.kt - Setting up a reminder
+btnSetTime.setOnClickListener {
+    val now = Calendar.getInstance()
+    val hour = now.get(Calendar.HOUR_OF_DAY)
+    val minute = now.get(Calendar.MINUTE)
+
+    TimePickerDialog(this, { _, selectedHour, selectedMinute ->
+        saveReminderTime(selectedHour, selectedMinute)
+        tvTime.text = "Reminder set for: %02d:%02d".format(selectedHour, selectedMinute)
+        
+        // Check permission before scheduling
+        if (hasNotificationPermission()) {
+            scheduleReminder(selectedHour, selectedMinute)
+            Toast.makeText(this, "Daily reminder set", Toast.LENGTH_SHORT).show()
+        } else {
+            requestNotificationPermission()
+        }
+    }, hour, minute, true).show()
+}</code></pre>
+
+    <p><strong>Scheduling the reminder with AlarmManager:</strong></p>
+    <pre><code>private fun scheduleReminder(hour: Int, minute: Int) {
+    try {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, ReminderReceiver::class.java)
+        
+        // Use unique request code based on time to avoid conflicts
+        val requestCode = (hour * 60 + minute)
+        
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Cancel any existing alarms with the same ID
+        alarmManager.cancel(pendingIntent)
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            if (before(Calendar.getInstance())) {
+                add(Calendar.DAY_OF_MONTH, 1)
+            }
+        }
+
+        // Use EXACT scheduling where available
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            alarmManager.setExact(
+                AlarmManager.RTC_WAKEUP, 
+                calendar.timeInMillis, 
+                pendingIntent
+            )
+        } else {
+            alarmManager.setRepeating(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                AlarmManager.INTERVAL_DAY,
+                pendingIntent
+            )
+        }
+    } catch (e: Exception) {
+        Toast.makeText(this, "Error setting reminder: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}</code></pre>
+</div>
+
+<h2>Transaction Model</h2>
+
+<div class="question">10. How is the Transaction model defined?</div>
+<div class="answer">
+    <p>The <code>Transaction</code> model is defined in <code>Transaction.kt</code> and provides the data structure for financial transactions:</p>
+    
+    <pre><code>// Transaction.kt
+package com.example.personalfinancetrackerapp.model
+
+data class Transaction(
+    val id: Int,
+    var title: String,
+    var amount: Double,
+    var category: String,
+    var date: String
+)</code></pre>
+    
+    <p>This data class contains all the necessary fields to track financial transactions, including ID, title, amount, category, and date. It's used throughout the app to store, display, and process transaction data.</p>
+</div>
+
+<h2>Main Activity Structure</h2>
+
+<div class="question">11. How is the MainActivity organized and what are its main functions?</div>
+<div class="answer">
+    <p><code>MainActivity.kt</code> serves as the central dashboard for the app, providing navigation to different features:</p>
+    
+    <pre><code>// MainActivity.kt - Main dashboard setup
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    setContentView(R.layout.activity_main)
+
+    // Setup UI components
+    setupButtons()
+    
+    // Load latest data
+    loadLatestTransactions()
+    checkBudgetStatus()
+}
+
+private fun setupButtons() {
+    findViewById<Button>(R.id.btnAddTransaction).setOnClickListener {
+        startActivity(Intent(this, TransactionActivity::class.java))
+    }
+    
+    findViewById<Button>(R.id.btnViewAll).setOnClickListener {
+        startActivity(Intent(this, TransactionListActivity::class.java))
+    }
+    
+    findViewById<Button>(R.id.btnBudget).setOnClickListener {
+        startActivity(Intent(this, BudgetActivity::class.java))
+    }
+    
+    findViewById<Button>(R.id.btnChart).setOnClickListener {
+        startActivity(Intent(this, CategoryChartActivity::class.java))
+    }
+    
+    findViewById<Button>(R.id.btnReminders).setOnClickListener {
+        startActivity(Intent(this, ReminderSettingsActivity::class.java))
+    }
+    
+    findViewById<Button>(R.id.btnExport).setOnClickListener {
+        exportData()
+    }
+    
+    findViewById<Button>(R.id.btnImport).setOnClickListener {
+        importData()
+    }
+}</code></pre>
+
+    <p><strong>Budget Status Check:</strong></p>
+    <pre><code>private fun checkBudgetStatus() {
+    val tvBudgetWarning = findViewById<TextView>(R.id.tvBudgetWarning)
+    
+    val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+    val budget = sharedPref.getFloat("budget", 0f)
+    
+    if (budget == 0f) {
+        tvBudgetWarning.text = "⚠️ No budget set! Tap 'Budget' to set one."
+        tvBudgetWarning.visibility = View.VISIBLE
+        return
+    }
+    
+    // Calculate total spending
+    val json = sharedPref.getString("transactions", null)
+    val type = object : TypeToken<List<Transaction>>() {}.type
+    val transactions: List<Transaction> = if (json != null) {
+        Gson().fromJson(json, type)
+    } else {
+        emptyList()
+    }
+    
+    val totalSpent = transactions.sumOf { it.amount }.toFloat()
+    val percentageUsed = (totalSpent / budget) * 100
+    
+    // Show warning based on budget usage
+    tvBudgetWarning.text = when {
+        percentageUsed > 100 -> "❌ You have exceeded your budget!"
+        percentageUsed > 80 -> "⚠️ You're close to exceeding your budget!"
+        else -> ""
+    }
+    
+    tvBudgetWarning.visibility = if (tvBudgetWarning.text.isNotEmpty()) View.VISIBLE else View.GONE
+}</code></pre>
+</div>
+
+<h2>Project Architecture</h2>
+
+<div class="question">12. Describe the overall architecture of the Personal Finance Tracker App</div>
+<div class="answer">
+    <p>The Personal Finance Tracker App follows a modular architecture with the following components:</p>
+    
+    <ol>
+        <li><strong>Model</strong>: Defined in <code>Transaction.kt</code>, provides the data structure for financial transactions.</li>
+        
+        <li><strong>Activities</strong>:
+            <ul>
+                <li><code>MainActivity.kt</code> - Central dashboard with navigation to all features</li>
+                <li><code>TransactionActivity.kt</code> - For adding and editing transactions</li>
+                <li><code>TransactionListActivity.kt</code> - For viewing and managing transactions</li>
+                <li><code>BudgetActivity.kt</code> - For setting and tracking monthly budget</li>
+                <li><code>CategoryChartActivity.kt</code> - For visualizing spending by category</li>
+                <li><code>ReminderSettingsActivity.kt</code> - For setting daily reminders</li>
+            </ul>
+        </li>
+        
+        <li><strong>Adapters</strong>: <code>TransactionAdapter.kt</code> connects the transaction data to RecyclerView for display.</li>
+        
+        <li><strong>Broadcast Receivers</strong>:
+            <ul>
+                <li><code>ReminderReceiver.kt</code> - For handling scheduled reminders</li>
+                <li><code>BootReceiver.kt</code> - For restoring reminders after device restart</li>
+            </ul>
+        </li>
+        
+        <li><strong>Utility Classes</strong>:
+            <ul>
+                <li><code>SharedPrefHelper.kt</code> - For managing app preferences and data persistence</li>
+                <li><code>NotificationHelper.kt</code> - For creating notification channels</li>
+            </ul>
+        </li>
+    </ol>
+    
+    <p>The app uses SharedPreferences for data persistence, storing transaction data as JSON strings. It follows a user-centric design with focused activities for specific tasks, making it intuitive to use.</p>
+</div>
+
+</body>
+</html>
