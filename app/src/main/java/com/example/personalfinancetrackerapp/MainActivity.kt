@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity() {
         navigationView.setNavigationItemSelectedListener { item ->
             // Close drawer when item is tapped
             drawerLayout.closeDrawer(GravityCompat.START)
-            
+
             when (item.itemId) {
                 R.id.nav_home -> {
                     // Already on home screen

@@ -7,9 +7,9 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.example.personalfinancetrackerapp.model.Transaction
@@ -27,16 +27,33 @@ class BudgetActivity : AppCompatActivity() {
     private lateinit var tvTotalSpent: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var tvWarning: TextView
-
     private lateinit var drawerLayout: DrawerLayout
-
 
     private var budget: Float = 0f
     private var totalSpent: Float = 0f
 
+    private val transactionResultLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            calculateTotalSpent()
+            updateUI()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_budget)
+
+        // Check if user is logged in
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to manage budget", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
 
         inputBudget = findViewById(R.id.inputBudget)
         btnSave = findViewById(R.id.btnSaveBudget)
@@ -46,14 +63,14 @@ class BudgetActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         tvWarning = findViewById(R.id.tvWarning)
 
-        progressBar.visibility = ProgressBar.GONE  // 🧹 Remove spinner
+        progressBar.visibility = ProgressBar.GONE // 🧹 Remove spinner
 
         loadBudget()
         calculateTotalSpent()
         updateUI()
-        //-----------------------------
+
         // Set up toolbar
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
         // Set up drawer layout
@@ -69,22 +86,18 @@ class BudgetActivity : AppCompatActivity() {
         // Set up navigation drawer
         val navigationView = findViewById<NavigationView>(R.id.navigationView)
         navigationView.setNavigationItemSelectedListener { item ->
-            // Close drawer when item is tapped
             drawerLayout.closeDrawer(GravityCompat.START)
-
             when (item.itemId) {
                 R.id.nav_home -> {
                     startActivity(Intent(this, MainActivity::class.java))
-
                     true
                 }
                 R.id.nav_transactions -> {
-                    startActivity(Intent(this, TransactionActivity::class.java))
-
+                    val intent = Intent(this, TransactionActivity::class.java)
+                    transactionResultLauncher.launch(intent)
                     true
                 }
                 R.id.nav_budget -> {
-
                     true
                 }
                 R.id.nav_chart -> {
@@ -99,13 +112,10 @@ class BudgetActivity : AppCompatActivity() {
                     exportTransactions()
                     true
                 }
-
                 else -> false
             }
         }
 
-
-        //------------------------------
         btnSave.setOnClickListener {
             val input = inputBudget.text.toString().toFloatOrNull()
             if (input == null || input <= 0) {
@@ -114,7 +124,7 @@ class BudgetActivity : AppCompatActivity() {
             }
             budget = input
             getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-                .edit().putFloat("budget", budget).apply()
+                .edit().putFloat("budget_$currentUser", budget).apply()
 
             updateUI()
             Toast.makeText(this, "Budget Saved ✅", Toast.LENGTH_SHORT).show()
@@ -122,26 +132,35 @@ class BudgetActivity : AppCompatActivity() {
 
         btnReset.setOnClickListener {
             val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-            prefs.edit().remove("budget").apply()
+            prefs.edit().remove("budget_$currentUser").apply()
             budget = 0f
             updateUI()
             Toast.makeText(this, "Budget has been reset", Toast.LENGTH_SHORT).show()
         }
-
-
-
     }
 
     private fun loadBudget() {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null) ?: return
         val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        budget = prefs.getFloat("budget", 0f)
+        budget = prefs.getFloat("budget_$currentUser", 0f)
     }
 
     private fun calculateTotalSpent() {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null) ?: return
         val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("transactions", null)
+        val json = prefs.getString("transactions_$currentUser", null)
         val type = object : TypeToken<List<Transaction>>() {}.type
-        val transactions: List<Transaction> = if (json != null) Gson().fromJson(json, type) else emptyList()
+        val transactions: List<Transaction> = if (json != null) {
+            try {
+                Gson().fromJson(json, type)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
         totalSpent = transactions.sumOf { it.amount }.toFloat()
     }
 
@@ -161,15 +180,24 @@ class BudgetActivity : AppCompatActivity() {
     }
 
     private fun exportTransactions() {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to export transactions", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
         val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("transactions", null)
+        val json = prefs.getString("transactions_$currentUser", null)
 
         if (json == null) {
             Toast.makeText(this, "No transactions to export", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val fileName = "transactions_backup.json"
+        val fileName = "transactions_${currentUser}_backup.json"
 
         val contentValues = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)

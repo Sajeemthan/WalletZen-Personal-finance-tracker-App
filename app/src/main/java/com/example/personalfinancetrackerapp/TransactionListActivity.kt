@@ -7,9 +7,9 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -25,24 +25,39 @@ class TransactionListActivity : AppCompatActivity() {
     private lateinit var transactionRecycler: RecyclerView
     private lateinit var transactionList: MutableList<Transaction>
     private lateinit var adapter: TransactionAdapter
-
     private lateinit var drawerLayout: DrawerLayout
+
+    private val transactionResultLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            reloadTransactions() // Refresh the transaction list
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_transaction_list)
 
+        // Check if user is logged in
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to view transactions", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
         transactionRecycler = findViewById(R.id.recyclerTransactions)
         transactionRecycler.layoutManager = LinearLayoutManager(this)
 
         transactionList = loadTransactions()
-
-        adapter = TransactionAdapter(transactionList)
+        adapter = TransactionAdapter(transactionList, this)
         transactionRecycler.adapter = adapter
 
-        //-----------------------------
         // Set up toolbar
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
         // Set up drawer layout
@@ -58,13 +73,10 @@ class TransactionListActivity : AppCompatActivity() {
         // Set up navigation drawer
         val navigationView = findViewById<NavigationView>(R.id.navigationView)
         navigationView.setNavigationItemSelectedListener { item ->
-            // Close drawer when item is tapped
             drawerLayout.closeDrawer(GravityCompat.START)
-
             when (item.itemId) {
                 R.id.nav_home -> {
                     startActivity(Intent(this, MainActivity::class.java))
-
                     true
                 }
                 R.id.nav_transactions -> {
@@ -86,13 +98,9 @@ class TransactionListActivity : AppCompatActivity() {
                     exportTransactions()
                     true
                 }
-
                 else -> false
             }
         }
-
-
-        //------------------------------
     }
 
     override fun onResume() {
@@ -101,42 +109,71 @@ class TransactionListActivity : AppCompatActivity() {
     }
 
     private fun reloadTransactions() {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null) ?: return
+
         val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = sharedPref.getString("transactions", null)
+        val userTransactionKey = "transactions_$currentUser"
+        val json = sharedPref.getString(userTransactionKey, null)
         val type = object : TypeToken<MutableList<Transaction>>() {}.type
 
         val updatedList: MutableList<Transaction> = if (json != null) {
-            Gson().fromJson(json, type)
+            try {
+                Gson().fromJson(json, type)
+            } catch (e: Exception) {
+                mutableListOf()
+            }
         } else {
             mutableListOf()
         }
 
         transactionList.clear()
         transactionList.addAll(updatedList)
-        adapter.notifyDataSetChanged()
+        adapter.updateTransactions(updatedList)
     }
 
     private fun loadTransactions(): MutableList<Transaction> {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            return mutableListOf()
+        }
+
         val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = sharedPref.getString("transactions", null)
+        val userTransactionKey = "transactions_$currentUser"
+        val json = sharedPref.getString(userTransactionKey, null)
         return if (json != null) {
             val type = object : TypeToken<MutableList<Transaction>>() {}.type
-            Gson().fromJson(json, type)
+            try {
+                Gson().fromJson(json, type)
+            } catch (e: Exception) {
+                mutableListOf()
+            }
         } else {
             mutableListOf()
         }
     }
 
     private fun exportTransactions() {
-        val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("transactions", null)
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to export transactions", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
+        val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
+        val userTransactionKey = "transactions_$currentUser"
+        val json = sharedPref.getString(userTransactionKey, null)
 
         if (json == null) {
             Toast.makeText(this, "No transactions to export", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val fileName = "transactions_backup.json"
+        val fileName = "transactions_${currentUser}_backup.json"
 
         val contentValues = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)

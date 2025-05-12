@@ -26,119 +26,211 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:title="WalletZen" />
 
-        <!-- Main Content -->
-        <androidx.constraintlayout.widget.ConstraintLayout
+        <!-- ScrollView for All Content -->
+        <ScrollView
+            android:id="@+id/mainScrollView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/rembg1"
-            android:fitsSystemWindows="true"
-            app:layout_constraintTop_toBottomOf="@id/toolbar"
-            tools:layout_editor_absoluteX="0dp">
+            android:layout_height="0dp"
+            android:fillViewport="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/toolbar">
 
-            <!-- Header Card -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/headerCard"
+            <!-- LinearLayout for Content -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                app:cardBackgroundColor="@android:color/transparent"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="8dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent">
-
-                <!-- Header Content -->
-            </androidx.cardview.widget.CardView>
-
-            <!-- Card 2 -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/cardView2"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                app:cardBackgroundColor="@color/transparent"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="8dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/headerCard"></androidx.cardview.widget.CardView>
-
-            <!-- Daily Reminder Section -->
-
-            <LinearLayout
-                android:id="@+id/linearLayout3"
-                android:layout_width="382dp"
-                android:layout_height="157dp"
-                android:background="@drawable/message_bubble"
+                android:background="@drawable/rembg1"
                 android:orientation="vertical"
-                android:padding="16dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.62"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/cardView2"
-                app:layout_constraintVertical_bias="0.341">
+                android:padding="16dp">
 
-                <TextView
+                <!-- Header Card -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/headerCard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/daily_reminder"
-                    android:textColor="#000000"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="@android:color/transparent"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="8dp">
 
-                <Button
-                    android:id="@+id/btnSetTime"
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/gradient_card"
+                        android:gravity="center"
+                        android:padding="16dp"
+                        android:text="Welcome to Reminder Settings"
+                        android:textColor="#FFFFFF"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Card 2 (Empty Card Placeholder) -->
+
+                <!-- Reminder Section -->
+                <LinearLayout
+                    android:id="@+id/linearLayout3"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/btn_style_primary"
-                    android:drawableStart="@drawable/ic_clock"
-                    android:drawablePadding="8dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:padding="12dp"
-                    android:text="@string/set_daily_reminder_time"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold" />
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/message_bubble"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-                <TextView
-                    android:id="@+id/tvCurrentTime"
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="@string/daily_reminder"
+                        android:textColor="#000000"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnSetTime"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/btn_style_primary"
+                        android:contentDescription="Set daily reminder time"
+                        android:drawableStart="@drawable/ic_clock"
+                        android:drawablePadding="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:padding="12dp"
+                        android:text="@string/set_daily_reminder_time"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvCurrentTime"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:paddingTop="16dp"
+                        android:text="@string/no_reminder_time_set"
+                        android:textColor="#000000"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <androidx.cardview.widget.CardView
+                        android:id="@+id/cardView2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        app:cardBackgroundColor="@android:color/transparent"
+                        app:cardCornerRadius="12dp"
+                        app:cardElevation="8dp" />
+                </LinearLayout>
+
+                <!-- Feedback Header -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:paddingTop="16dp"
-                    android:text="@string/no_reminder_time_set"
-                    android:textColor="#000000"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/gradient_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Feedback"
+                        android:textColor="#FFFFFF"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Feedback Section -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/feedbackCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="24dp"
+                    app:cardBackgroundColor="@android:color/transparent"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/gradient_card"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:text="We value your feedback"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/etFeedback"
+                            android:layout_width="match_parent"
+                            android:layout_height="120dp"
+                            android:layout_marginBottom="16dp"
+                            android:background="@drawable/edit_text_3d"
+                            android:fontFamily="monospace"
+                            android:gravity="top|start"
+                            android:hint="Share your experience or suggestions..."
+                            android:inputType="textMultiLine"
+                            android:maxLines="5"
+                            android:padding="12dp"
+                            android:textColor="#000000"
+                            android:textColorHint="#888888" />
+
+                        <Button
+                            android:id="@+id/btnSubmitFeedback"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/btn_style_secondary"
+                            android:contentDescription="Submit feedback"
+                            android:fontFamily="monospace"
+                            android:padding="12dp"
+                            android:text="Submit Feedback"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Reviews Section -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/gradient_card"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:padding="16dp"
+                        android:text="Reviews"
+                        android:textColor="#FFFFFF"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+
+                    <!-- Reviews Container -->
+                    <LinearLayout
+                        android:id="@+id/reviewsContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="8dp" />
+                </LinearLayout>
             </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="376dp"
-                android:layout_height="56dp"
-                android:layout_marginTop="140dp"
-                android:background="@drawable/gradient_card"
-                android:orientation="vertical"
-                android:padding="16dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/cardView2">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_horizontal"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/reminder_settings"
-                    android:textColor="#FFFFFF"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
+        </ScrollView>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Navigation Drawer -->
@@ -152,5 +244,4 @@
         app:menu="@menu/bottom_nav_menu"
         app:itemIconTint="@color/grn_500"
         app:itemTextColor="@color/grn_700" />
-
 </androidx.drawerlayout.widget.DrawerLayout>

@@ -5,5 +5,6 @@ data class Transaction(
     var title: String,
     var amount: Double,
     var category: String,
-    var date: String
+    var date: String,
+    val user: String
 )

@@ -16,7 +16,7 @@ class LaunchActivity : AppCompatActivity() {
         
         // Set click listener to navigate to MainActivity
         btnContinueToApp.setOnClickListener {
-            val intent = Intent(this, MainActivity::class.java)
+            val intent = Intent(this, LoginActivity::class.java)
             startActivity(intent)
             finish() // Close the launch activity so user can't go back to it
         }
