@@ -1,18 +1,24 @@
 package com.example.personalfinancetrackerapp
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import com.example.personalfinancetrackerapp.data.FinanceDatabase
 import com.example.personalfinancetrackerapp.model.Transaction
 import com.github.mikephil.charting.charts.PieChart
 import com.github.mikephil.charting.data.PieData
@@ -21,7 +27,10 @@ import com.github.mikephil.charting.data.PieEntry
 import com.github.mikephil.charting.utils.ColorTemplate
 import com.google.android.material.navigation.NavigationView
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.OutputStream
 
 class CategoryChartActivity : AppCompatActivity() {
@@ -29,26 +38,49 @@ class CategoryChartActivity : AppCompatActivity() {
     private lateinit var pieChart: PieChart
     private lateinit var drawerLayout: DrawerLayout
 
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            exportTransactions()
+        } else {
+            Toast.makeText(this, "Storage permission denied. Cannot export transactions.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_category_chart)
 
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to view spending chart", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
         pieChart = findViewById(R.id.pieChart)
 
-        val transactions = loadTransactions()
-        val categoryTotals = calculateTotals(transactions)
+        val db = FinanceDatabase.getDatabase(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val transactions = db.financeDao().getAllTransactions().filter { it.user == currentUser }
+                val categoryTotals = calculateTotals(transactions)
+                withContext(Dispatchers.Main) {
+                    setupPieChart(categoryTotals)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@CategoryChartActivity, "Error loading transactions: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
-        setupPieChart(categoryTotals)
-
-
-
-
-        //-----------------------------
-        // Set up toolbar
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
-        // Set up drawer layout
         drawerLayout = findViewById(R.id.drawerLayout)
         val toggle = ActionBarDrawerToggle(
             this, drawerLayout, toolbar,
@@ -58,16 +90,12 @@ class CategoryChartActivity : AppCompatActivity() {
         drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
 
-        // Set up navigation drawer
         val navigationView = findViewById<NavigationView>(R.id.navigationView)
         navigationView.setNavigationItemSelectedListener { item ->
-            // Close drawer when item is tapped
             drawerLayout.closeDrawer(GravityCompat.START)
-
             when (item.itemId) {
                 R.id.nav_home -> {
                     startActivity(Intent(this, MainActivity::class.java))
-
                     true
                 }
                 R.id.nav_transactions -> {
@@ -86,37 +114,32 @@ class CategoryChartActivity : AppCompatActivity() {
                     true
                 }
                 R.id.menu_export -> {
-                    exportTransactions()
+                    checkStoragePermissionAndExport()
                     true
                 }
-
                 else -> false
             }
         }
-
-
-        //------------------------------
-    }
-
-    private fun loadTransactions(): List<Transaction> {
-        val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("transactions", null)
-        val type = object : TypeToken<List<Transaction>>() {}.type
-        return if (json != null) Gson().fromJson(json, type) else emptyList()
     }
 
     private fun calculateTotals(transactions: List<Transaction>): Map<String, Float> {
         val categoryMap = mutableMapOf<String, Float>()
-
         for (t in transactions) {
             val current = categoryMap[t.category] ?: 0f
             categoryMap[t.category] = current + t.amount.toFloat()
         }
-
         return categoryMap
     }
 
     private fun setupPieChart(categoryTotals: Map<String, Float>) {
+        if (categoryTotals.isEmpty()) {
+            pieChart.data = null
+            pieChart.centerText = "No Transactions Available"
+            pieChart.description.isEnabled = false
+            pieChart.invalidate()
+            return
+        }
+
         val entries = ArrayList<PieEntry>()
         for ((category, amount) in categoryTotals) {
             entries.add(PieEntry(amount, category))
@@ -137,34 +160,70 @@ class CategoryChartActivity : AppCompatActivity() {
         pieChart.invalidate()
     }
 
-    private fun exportTransactions() {
-        val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("transactions", null)
+    private fun checkStoragePermissionAndExport() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // For Android 10+, MediaStore doesn't require storage permission
+            exportTransactions()
+        } else {
+            // For Android 9 and below, check WRITE_EXTERNAL_STORAGE permission
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                exportTransactions()
+            } else {
+                requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+    }
 
-        if (json == null) {
-            Toast.makeText(this, "No transactions to export", Toast.LENGTH_SHORT).show()
+    private fun exportTransactions() {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to export transactions", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
             return
         }
 
-        val fileName = "transactions_backup.json"
+        val db = FinanceDatabase.getDatabase(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val transactions = db.financeDao().getAllTransactions().filter { it.user == currentUser }
+                val gson = Gson()
+                val json = gson.toJson(transactions)
+                withContext(Dispatchers.Main) {
+                    if (json.isEmpty() || transactions.isEmpty()) {
+                        Toast.makeText(this@CategoryChartActivity, "No transactions to export", Toast.LENGTH_SHORT).show()
+                        return@withContext
+                    }
 
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, "application/json")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-        }
+                    val fileName = "transactions_${currentUser}_backup.json"
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                        put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    }
 
-        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-
-        if (uri != null) {
-            val outputStream: OutputStream? = contentResolver.openOutputStream(uri)
-            outputStream?.use {
-                it.write(json.toByteArray())
-                it.flush()
-                Toast.makeText(this, "✅ Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        val outputStream: OutputStream? = contentResolver.openOutputStream(uri)
+                        outputStream?.use {
+                            it.write(json.toByteArray())
+                            it.flush()
+                            Toast.makeText(this@CategoryChartActivity, "✅ Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+                        } ?: run {
+                            Toast.makeText(this@CategoryChartActivity, "❌ Failed to export: Unable to open output stream", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(this@CategoryChartActivity, "❌ Failed to export: Unable to create file", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@CategoryChartActivity, "Error exporting transactions: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
-        } else {
-            Toast.makeText(this, "❌ Failed to export", Toast.LENGTH_SHORT).show()
         }
     }
 }

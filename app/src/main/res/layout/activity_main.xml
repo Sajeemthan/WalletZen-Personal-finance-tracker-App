@@ -28,9 +28,6 @@
             app:title="WalletZen" />
 
         <!-- Centered Content Layout -->
-
-        <!-- Floating Action Button -->
-
         <LinearLayout
             android:id="@+id/contentLayout"
             android:layout_width="400dp"
@@ -99,7 +96,6 @@
                 android:textColor="#0B0B0B"
                 android:textSize="16sp"
                 android:textStyle="bold" />
-
         </LinearLayout>
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -113,6 +109,19 @@
             app:tint="@android:color/white"
             app:backgroundTint="#F44336" />
 
+        <Button
+            android:id="@+id/btnLogout"
+            android:layout_width="225dp"
+            android:layout_height="63dp"
+
+            android:layout_marginBottom="88dp"
+            android:background="@drawable/btn_style_primary"
+            android:text="Logout"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Navigation Drawer -->
@@ -125,5 +134,17 @@
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/bottom_nav_menu"
         app:itemIconTint="@color/grn_500"
-        app:itemTextColor="@color/grn_700" />
+        app:itemTextColor="@color/grn_700">
+
+        <!-- Logout Button at Bottom -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="bottom"
+            android:padding="16dp">
+
+        </LinearLayout>
+    </com.google.android.material.navigation.NavigationView>
+
 </androidx.drawerlayout.widget.DrawerLayout>

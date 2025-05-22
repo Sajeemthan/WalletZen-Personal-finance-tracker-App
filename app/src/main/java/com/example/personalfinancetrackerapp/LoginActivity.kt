@@ -7,6 +7,12 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.example.personalfinancetrackerapp.data.FinanceDatabase
+import com.example.personalfinancetrackerapp.model.User
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LoginActivity : AppCompatActivity() {
 
@@ -14,25 +20,28 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.login_page)
 
-        // Find views by their IDs
+        // Check if a user is already logged in
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser != null) {
+            // User is already logged in, redirect to MainActivity
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return
+        }
+
         val etUsername = findViewById<EditText>(R.id.etUsername)
         val etPassword = findViewById<EditText>(R.id.etPassword)
         val btnLogin = findViewById<Button>(R.id.btnLogin)
         val btnCreateAccount = findViewById<Button>(R.id.btnCreateAccount)
 
-        // SharedPreferences to retrieve user data
-        val sharedPreferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val db = FinanceDatabase.getDatabase(this)
+        val userDao = db.financeDao()
 
-        // Login button click listener
         btnLogin.setOnClickListener {
             val username = etUsername.text.toString().trim()
             val password = etPassword.text.toString().trim()
 
-            // Retrieve stored credentials
-            val storedUsername = sharedPreferences.getString("username", null)
-            val storedPassword = sharedPreferences.getString("password", null)
-
-            // Validate inputs
             when {
                 username.isEmpty() -> {
                     etUsername.error = "Username is required"
@@ -42,35 +51,40 @@ class LoginActivity : AppCompatActivity() {
                     etPassword.error = "Password is required"
                     etPassword.requestFocus()
                 }
-                storedUsername == null || storedPassword == null -> {
-                    Toast.makeText(this, "No account found. Please sign up.", Toast.LENGTH_SHORT).show()
-                }
-                username != storedUsername -> {
-                    etUsername.error = "Invalid username"
-                    etUsername.requestFocus()
-                }
-                password != storedPassword -> {
-                    etPassword.error = "Invalid password"
-                    etPassword.requestFocus()
-                }
                 else -> {
-                    // Successful login
-                    Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val user = userDao.getUser(username)
+                            withContext(Dispatchers.Main) {
+                                if (user == null) {
+                                    Toast.makeText(this@LoginActivity, "No account found. Please sign up.", Toast.LENGTH_SHORT).show()
+                                } else if (user.password != password) {
+                                    etPassword.error = "Invalid password"
+                                    etPassword.requestFocus()
+                                } else {
+                                    // Save the username in SharedPreferences
+                                    userPrefs.edit().putString("username", username).apply()
 
-                    // Navigate to MainActivity (or your desired activity after login)
-                    val intent = Intent(this, MainActivity::class.java)
-                    startActivity(intent)
-                    finish() // Close LoginActivity
+                                    Toast.makeText(this@LoginActivity, "Login successful!", Toast.LENGTH_SHORT).show()
+                                    val intent = Intent(this@LoginActivity, MainActivity::class.java)
+                                    startActivity(intent)
+                                    finish()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@LoginActivity, "Error during login: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Create Account button click listener
         btnCreateAccount.setOnClickListener {
-            // Navigate to SignupActivity
             val intent = Intent(this, SignupActivity::class.java)
             startActivity(intent)
-            finish() // Close LoginActivity
+            finish()
         }
     }
 }

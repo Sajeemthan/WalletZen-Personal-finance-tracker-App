@@ -6,29 +6,36 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.example.personalfinancetrackerapp.data.FinanceDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.*
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            val prefs = context.getSharedPreferences("ReminderPrefs", Context.MODE_PRIVATE)
-            val hour = prefs.getInt("hour", -1)
-            val minute = prefs.getInt("minute", -1)
-
-            if (hour != -1 && minute != -1) {
-                scheduleReminder(context, hour, minute)
+            val db = FinanceDatabase.getDatabase(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                val users = db.financeDao().getAllUsers()
+                users.forEach { user ->
+                    val pref = db.financeDao().getPreference(user.username)
+                    if (pref != null && pref.reminderHour != -1 && pref.reminderMinute != -1) {
+                        scheduleReminder(context, pref.reminderHour, pref.reminderMinute, user.username)
+                    }
+                }
             }
         }
     }
 
-    private fun scheduleReminder(context: Context, hour: Int, minute: Int) {
+    private fun scheduleReminder(context: Context, hour: Int, minute: Int, username: String) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, ReminderReceiver::class.java)
-            
-            // Use unique request code based on time
+            val intent = Intent(context, ReminderReceiver::class.java).apply {
+                putExtra("username", username)
+            }
+
             val requestCode = (hour * 60 + minute)
-            
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 requestCode,
@@ -46,7 +53,6 @@ class BootReceiver : BroadcastReceiver() {
                 }
             }
 
-            // Use exact scheduling where available
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
@@ -55,8 +61,8 @@ class BootReceiver : BroadcastReceiver() {
                 )
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                 alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP, 
-                    calendar.timeInMillis, 
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
                     pendingIntent
                 )
             } else {
@@ -68,6 +74,7 @@ class BootReceiver : BroadcastReceiver() {
                 )
             }
         } catch (e: Exception) {
+            //catch (e: Exception) {
             // Log error but can't display toast from boot receiver
         }
     }

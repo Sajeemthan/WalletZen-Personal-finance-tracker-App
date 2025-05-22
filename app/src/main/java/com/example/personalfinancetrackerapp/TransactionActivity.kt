@@ -1,21 +1,30 @@
 package com.example.personalfinancetrackerapp
 
+import android.Manifest
 import android.app.DatePickerDialog
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import com.example.personalfinancetrackerapp.data.FinanceDatabase
 import com.example.personalfinancetrackerapp.model.Transaction
 import com.google.android.material.navigation.NavigationView
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,7 +39,17 @@ class TransactionActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
 
     private var selectedDate: String = ""
-    private var editPosition: Int = -1 // for updating existing transaction
+    private var editId: Int = -1 // For updating existing transaction
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            exportTransactions()
+        } else {
+            Toast.makeText(this, "Storage permission denied. Cannot export transactions.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,11 +61,9 @@ class TransactionActivity : AppCompatActivity() {
         dateText = findViewById(R.id.textDate)
         saveBtn = findViewById(R.id.btnSave)
 
-        // Set up toolbar
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
-        // Set up drawer layout
         drawerLayout = findViewById(R.id.drawerLayout)
         val toggle = ActionBarDrawerToggle(
             this, drawerLayout, toolbar,
@@ -56,7 +73,6 @@ class TransactionActivity : AppCompatActivity() {
         drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
 
-        // Set up navigation drawer
         val navigationView = findViewById<NavigationView>(R.id.navigationView)
         navigationView.setNavigationItemSelectedListener { item ->
             drawerLayout.closeDrawer(GravityCompat.START)
@@ -81,14 +97,13 @@ class TransactionActivity : AppCompatActivity() {
                     true
                 }
                 R.id.menu_export -> {
-                    exportTransactions()
+                    checkStoragePermissionAndExport()
                     true
                 }
                 else -> false
             }
         }
 
-        // Get current user from SharedPreferences
         val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
         val currentUser = userPrefs.getString("username", null)
         if (currentUser == null) {
@@ -101,9 +116,8 @@ class TransactionActivity : AppCompatActivity() {
         setupCategorySpinner()
         setupDatePicker()
 
-        // Check if this is an Edit operation
         val editJson = intent.getStringExtra("editTransaction")
-        editPosition = intent.getIntExtra("position", -1)
+        editId = intent.getIntExtra("id", -1)
 
         if (editJson != null) {
             val gson = Gson()
@@ -116,6 +130,7 @@ class TransactionActivity : AppCompatActivity() {
             val categories = arrayOf("Food", "Transport", "Bills", "Shopping", "Other")
             val index = categories.indexOf(transaction.category)
             if (index >= 0) categorySpinner.setSelection(index)
+            editId = transaction.id
         }
 
         saveBtn.setOnClickListener {
@@ -130,47 +145,33 @@ class TransactionActivity : AppCompatActivity() {
             }
 
             val transaction = Transaction(
-                id = Random().nextInt(9999),
+                id = if (editId == -1) 0 else editId,
                 title = title,
                 amount = amount,
                 category = category,
                 date = date,
-                user = currentUser
+                user = currentUser // Assign the current user
             )
 
-            // Save or Update in SharedPreferences
-            val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-            val gson = Gson()
-
-            // Use user-specific key for transactions
-            val userTransactionKey = "transactions_$currentUser"
-            val existingJson = sharedPref.getString(userTransactionKey, null)
-            val type = object : TypeToken<MutableList<Transaction>>() {}.type
-            val transactionList: MutableList<Transaction> = if (existingJson != null) {
-                try {
-                    gson.fromJson(existingJson, type)
-                } catch (e: Exception) {
-                    mutableListOf() // Fallback to empty list if JSON parsing fails
+            val db = FinanceDatabase.getDatabase(this)
+            CoroutineScope(Dispatchers.IO).launch {
+                if (editId == -1) {
+                    db.financeDao().insertTransaction(transaction)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@TransactionActivity, "Transaction Saved ✅", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    db.financeDao().updateTransaction(transaction)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@TransactionActivity, "Transaction Updated ✅", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            } else {
-                mutableListOf()
+                withContext(Dispatchers.Main) {
+                    val resultIntent = Intent()
+                    setResult(RESULT_OK, resultIntent)
+                    finish()
+                }
             }
-
-            if (editPosition != -1 && editPosition < transactionList.size) {
-                transactionList[editPosition] = transaction
-                Toast.makeText(this, "Transaction Updated ✅", Toast.LENGTH_SHORT).show()
-            } else {
-                transactionList.add(transaction)
-                Toast.makeText(this, "Transaction Saved ✅", Toast.LENGTH_SHORT).show()
-            }
-
-            val updatedJson = gson.toJson(transactionList)
-            sharedPref.edit().putString(userTransactionKey, updatedJson).apply()
-
-            // Notify MainActivity of the change
-            val resultIntent = Intent()
-            setResult(RESULT_OK, resultIntent)
-            finish()
         }
     }
 
@@ -203,6 +204,22 @@ class TransactionActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkStoragePermissionAndExport() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // For Android 10+, MediaStore doesn't require storage permission
+            exportTransactions()
+        } else {
+            // For Android 9 and below, check WRITE_EXTERNAL_STORAGE permission
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                exportTransactions()
+            } else {
+                requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+    }
+
     private fun exportTransactions() {
         val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
         val currentUser = userPrefs.getString("username", null)
@@ -213,48 +230,39 @@ class TransactionActivity : AppCompatActivity() {
             return
         }
 
-        val sharedPref = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val userTransactionKey = "transactions_$currentUser"
-        val existingJson = sharedPref.getString(userTransactionKey, null)
+        val db = FinanceDatabase.getDatabase(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            // Fetch transactions for the current user only
+            val transactions = db.financeDao().getAllTransactions().filter { it.user == currentUser }
+            val gson = Gson()
+            val json = gson.toJson(transactions)
+            withContext(Dispatchers.Main) {
+                if (json.isEmpty() || transactions.isEmpty()) {
+                    Toast.makeText(this@TransactionActivity, "No transactions to export", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
 
-        if (existingJson == null) {
-            Toast.makeText(this, "No transactions to export", Toast.LENGTH_SHORT).show()
-            return
-        }
+                val fileName = "transactions_${currentUser}_backup.json"
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
 
-        val gson = Gson()
-        val type = object : TypeToken<MutableList<Transaction>>() {}.type
-        val transactions: MutableList<Transaction> = try {
-            gson.fromJson(existingJson, type)
-        } catch (e: Exception) {
-            mutableListOf()
-        }
-
-        if (transactions.isEmpty()) {
-            Toast.makeText(this, "No transactions to export", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val json = gson.toJson(transactions)
-        val fileName = "transactions_${currentUser}_backup.json"
-
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, "application/json")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-        }
-
-        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-
-        if (uri != null) {
-            val outputStream: OutputStream? = contentResolver.openOutputStream(uri)
-            outputStream?.use {
-                it.write(json.toByteArray())
-                it.flush()
-                Toast.makeText(this, "✅ Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    val outputStream: OutputStream? = contentResolver.openOutputStream(uri)
+                    outputStream?.use {
+                        it.write(json.toByteArray())
+                        it.flush()
+                        Toast.makeText(this@TransactionActivity, "✅ Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+                    } ?: run {
+                        Toast.makeText(this@TransactionActivity, "❌ Failed to export: Unable to open output stream", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this@TransactionActivity, "❌ Failed to export: Unable to create file", Toast.LENGTH_SHORT).show()
+                }
             }
-        } else {
-            Toast.makeText(this, "❌ Failed to export", Toast.LENGTH_SHORT).show()
         }
     }
 }

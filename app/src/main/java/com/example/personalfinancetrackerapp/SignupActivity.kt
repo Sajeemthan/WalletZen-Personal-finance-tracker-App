@@ -1,12 +1,17 @@
 package com.example.personalfinancetrackerapp
 
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.example.personalfinancetrackerapp.data.FinanceDatabase
+import com.example.personalfinancetrackerapp.model.User
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SignupActivity : AppCompatActivity() {
 
@@ -14,7 +19,6 @@ class SignupActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.signup)
 
-        // Find views by their IDs
         val etSignupUsername = findViewById<EditText>(R.id.etSignupUsername)
         val etSignupEmail = findViewById<EditText>(R.id.etSignupEmail)
         val etSignupPassword = findViewById<EditText>(R.id.etSignupPassword)
@@ -22,18 +26,15 @@ class SignupActivity : AppCompatActivity() {
         val btnSignup = findViewById<Button>(R.id.btnSignup)
         val btnBackToLogin = findViewById<Button>(R.id.btnBackToLogin)
 
-        // SharedPreferences to store user data
-        val sharedPreferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
-        val editor = sharedPreferences.edit()
+        val db = FinanceDatabase.getDatabase(this)
+        val userDao = db.financeDao()
 
-        // Sign Up button click listener
         btnSignup.setOnClickListener {
             val username = etSignupUsername.text.toString().trim()
             val email = etSignupEmail.text.toString().trim()
             val password = etSignupPassword.text.toString().trim()
             val confirmPassword = etConfirmPassword.text.toString().trim()
 
-            // Validate inputs
             when {
                 username.isEmpty() -> {
                     etSignupUsername.error = "Username is required"
@@ -64,29 +65,37 @@ class SignupActivity : AppCompatActivity() {
                     etConfirmPassword.requestFocus()
                 }
                 else -> {
-                    // Save user details to SharedPreferences
-                    editor.putString("username", username)
-                    editor.putString("email", email)
-                    editor.putString("password", password)
-                    editor.apply()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val existingUser = userDao.getUser(username)
+                            withContext(Dispatchers.Main) {
+                                if (existingUser != null) {
+                                    etSignupUsername.error = "Username already exists"
+                                    etSignupUsername.requestFocus()
+                                } else {
+                                    val newUser = User(username, email, password)
+                                    userDao.insertUser(newUser)
 
-                    // Show success message
-                    Toast.makeText(this, "Account created successfully!", Toast.LENGTH_SHORT).show()
-
-                    // Navigate to LoginActivity (assuming you have a LoginActivity)
-                    val intent = Intent(this, LoginActivity::class.java)
-                    startActivity(intent)
-                    finish() // Close SignupActivity
+                                    Toast.makeText(this@SignupActivity, "Account created successfully!", Toast.LENGTH_SHORT).show()
+                                    val intent = Intent(this@SignupActivity, LoginActivity::class.java)
+                                    startActivity(intent)
+                                    finish()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@SignupActivity, "Error creating account: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Back to Login button click listener
         btnBackToLogin.setOnClickListener {
-            // Navigate to LoginActivity
             val intent = Intent(this, LoginActivity::class.java)
             startActivity(intent)
-            finish() // Close SignupActivity
+            finish()
         }
     }
 }

@@ -24,8 +24,16 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import com.google.android.material.navigation.NavigationView
+import com.example.personalfinancetrackerapp.data.FinanceDatabase
+import com.example.personalfinancetrackerapp.model.Feedback
+import com.example.personalfinancetrackerapp.model.Preference
 import com.example.personalfinancetrackerapp.utils.NotificationHelper
+import com.google.android.material.navigation.NavigationView
+import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.util.*
 
@@ -35,22 +43,34 @@ class ReminderSettingsActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
     private val TAG = "ReminderSettingsActivity"
 
-    // Permission request launcher for notifications on Android 13+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            // Permission granted, proceed with scheduling
-            val prefs = getSharedPreferences("ReminderPrefs", Context.MODE_PRIVATE)
-            val hour = prefs.getInt("hour", -1)
-            val minute = prefs.getInt("minute", -1)
-
-            if (hour != -1 && minute != -1) {
-                scheduleReminder(hour, minute)
-                Toast.makeText(this, "Reminder scheduled", Toast.LENGTH_SHORT).show()
+            val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+            val currentUser = userPrefs.getString("username", null) ?: return@registerForActivityResult
+            val db = FinanceDatabase.getDatabase(this)
+            CoroutineScope(Dispatchers.IO).launch {
+                val pref = db.financeDao().getPreference(currentUser)
+                if (pref != null && pref.reminderHour != -1 && pref.reminderMinute != -1) {
+                    scheduleReminder(pref.reminderHour, pref.reminderMinute)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ReminderSettingsActivity, "Reminder scheduled", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         } else {
             Toast.makeText(this, "Notification permission denied. Reminders won't work.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            exportTransactions()
+        } else {
+            Toast.makeText(this, "Storage permission denied. Cannot export transactions.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -58,14 +78,20 @@ class ReminderSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_reminder_settings)
 
-        // Create notification channel early
         NotificationHelper.createNotificationChannel(this)
 
-        // Setup Toolbar
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to set reminders", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
-        // Setup DrawerLayout and NavigationView
         drawerLayout = findViewById(R.id.drawerLayout)
         val navigationView = findViewById<NavigationView>(R.id.navigationView)
         val toggle = ActionBarDrawerToggle(
@@ -75,7 +101,6 @@ class ReminderSettingsActivity : AppCompatActivity() {
         drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
 
-        // Handle NavigationView item clicks
         navigationView.setNavigationItemSelectedListener { item ->
             drawerLayout.closeDrawer(GravityCompat.START)
             when (item.itemId) {
@@ -99,27 +124,18 @@ class ReminderSettingsActivity : AppCompatActivity() {
                     true
                 }
                 R.id.menu_export -> {
-                    exportTransactions()
+                    checkStoragePermissionAndExport()
                     true
                 }
                 else -> false
             }
         }
 
-        // SharedPreferences for reminders, feedback, and user data
-        val reminderPrefs = getSharedPreferences("ReminderPrefs", Context.MODE_PRIVATE)
-        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
-        val editor = userPrefs.edit()
-
-        // Get username from SharedPreferences
-        val username = userPrefs.getString("username", "Anonymous") ?: "Anonymous"
-        Log.d(TAG, "Username retrieved: $username")
-
-        // Reminder Section
+        val db = FinanceDatabase.getDatabase(this)
         val btnSetTime = findViewById<Button>(R.id.btnSetTime)
         tvTime = findViewById(R.id.tvCurrentTime)
         checkNotificationPermission()
-        loadSavedTime()
+        loadSavedTime(db, currentUser)
 
         btnSetTime.setOnClickListener {
             val now = Calendar.getInstance()
@@ -127,7 +143,7 @@ class ReminderSettingsActivity : AppCompatActivity() {
             val minute = now.get(Calendar.MINUTE)
 
             TimePickerDialog(this, { _, selectedHour, selectedMinute ->
-                saveReminderTime(selectedHour, selectedMinute)
+                saveReminderTime(db, currentUser, selectedHour, selectedMinute)
                 tvTime.text = "Reminder set for: %02d:%02d".format(selectedHour, selectedMinute)
 
                 if (hasNotificationPermission()) {
@@ -139,15 +155,12 @@ class ReminderSettingsActivity : AppCompatActivity() {
             }, hour, minute, true).show()
         }
 
-        // Feedback Section
         val etFeedback = findViewById<EditText>(R.id.etFeedback)
         val btnSubmitFeedback = findViewById<Button>(R.id.btnSubmitFeedback)
         val reviewsContainer = findViewById<LinearLayout>(R.id.reviewsContainer)
 
-        // Load existing reviews
-        loadReviews(reviewsContainer, userPrefs)
+        loadReviews(db, reviewsContainer)
 
-        // Submit Feedback
         btnSubmitFeedback.setOnClickListener {
             val feedback = etFeedback.text.toString().trim()
             if (feedback.isEmpty()) {
@@ -156,112 +169,93 @@ class ReminderSettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // Generate a unique key for the feedback
-            val feedbackId = UUID.randomUUID().toString()
-            val feedbackData = "$username||$feedback"
-            editor.putString("feedback_$feedbackId", feedbackData)
-            editor.apply()
-            Log.d(TAG, "Feedback stored: feedback_$feedbackId = $feedbackData")
-
-            // Clear feedback input
-            etFeedback.text.clear()
-
-            // Show success message
-            Toast.makeText(this, "Feedback submitted!", Toast.LENGTH_SHORT).show()
-
-            // Reload reviews
-            loadReviews(reviewsContainer, userPrefs)
+            val feedbackEntity = Feedback(username = currentUser, comment = feedback)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    db.financeDao().insertFeedback(feedbackEntity)
+                    withContext(Dispatchers.Main) {
+                        etFeedback.text.clear()
+                        Toast.makeText(this@ReminderSettingsActivity, "Feedback submitted!", Toast.LENGTH_SHORT).show()
+                        loadReviews(db, reviewsContainer)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ReminderSettingsActivity, "Error submitting feedback: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
     }
 
-    private fun loadReviews(container: LinearLayout, sharedPreferences: android.content.SharedPreferences) {
-        // Clear existing views
+    private fun loadReviews(db: FinanceDatabase, container: LinearLayout) {
         container.removeAllViews()
         Log.d(TAG, "Cleared reviews container")
 
-        // Get all feedback entries
-        val allEntries = sharedPreferences.all
-        Log.d(TAG, "All SharedPreferences entries: $allEntries")
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val feedbackList = db.financeDao().getAllFeedback()
+                withContext(Dispatchers.Main) {
+                    if (feedbackList.isEmpty()) {
+                        val noReviewsTextView = TextView(this@ReminderSettingsActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            text = "No reviews yet"
+                            textSize = 14f
+                            setTextColor(android.graphics.Color.WHITE)
+                            setPadding(0, 0, 0, 8)
+                        }
+                        container.addView(noReviewsTextView)
+                        return@withContext
+                    }
 
-        val feedbackEntries = allEntries.filterKeys { it.startsWith("feedback_") }
-            .values
-            .mapNotNull { it as? String }
-        Log.d(TAG, "Feedback entries: $feedbackEntries")
+                    feedbackList.forEach { feedback ->
+                        val cardView = androidx.cardview.widget.CardView(this@ReminderSettingsActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                setMargins(0, 0, 0, 16)
+                            }
+                            radius = 12f
+                            cardElevation = 8f
+                            setCardBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        }
 
-        if (feedbackEntries.isEmpty()) {
-            Log.d(TAG, "No feedback entries found")
-            val noReviewsTextView = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                text = "No reviews yet"
-                textSize = 14f
-                setTextColor(android.graphics.Color.WHITE)
-                setPadding(0, 0, 0, 8)
-            }
-            container.addView(noReviewsTextView)
-            return
-        }
+                        val innerLayout = LinearLayout(this@ReminderSettingsActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(16, 16, 16, 16)
+                            setBackgroundResource(R.drawable.transparent_label_bg)
+                        }
 
-        // Add each review to the container
-        feedbackEntries.forEach { entry ->
-            Log.d(TAG, "Processing feedback entry: $entry")
-            val parts = entry.split("||", limit = 2)
-            if (parts.size != 2) {
-                Log.e(TAG, "Invalid feedback format: $entry")
-                return@forEach
-            }
-            val (username, feedback) = parts
+                        val usernameTextView = TextView(this@ReminderSettingsActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            text = "${feedback.username}: ${feedback.comment}"
+                            textSize = 16f
+                            setTextColor(android.graphics.Color.WHITE)
+                            setTypeface(null, android.graphics.Typeface.BOLD)
+                            setPadding(0, 0, 0, 8)
+                        }
 
-            // Create a CardView for each review
-            val cardView = androidx.cardview.widget.CardView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 0, 0, 16)
+                        innerLayout.addView(usernameTextView)
+                        cardView.addView(innerLayout)
+                        container.addView(cardView)
+                        Log.d(TAG, "Added review: ${feedback.username} - ${feedback.comment}")
+                    }
                 }
-                radius = 12f
-                cardElevation = 8f
-                setCardBackgroundColor(android.graphics.Color.TRANSPARENT)
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ReminderSettingsActivity, "Error loading reviews: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
-
-            // Create a LinearLayout inside the CardView
-            val innerLayout = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                orientation = LinearLayout.VERTICAL
-                setPadding(16, 16, 16, 16)
-                setBackgroundResource(R.drawable.transparent_label_bg)
-            }
-
-            // Username TextView
-            val usernameTextView = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                var printfeed = "$username: $feedback"
-                text = printfeed
-                textSize = 16f
-                setTextColor(android.graphics.Color.WHITE)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                setPadding(0, 0, 0, 8)
-            }
-
-
-            // Add TextViews to inner layout
-            innerLayout.addView(usernameTextView)
-
-            // Add inner layout to CardView
-            cardView.addView(innerLayout)
-
-            // Add CardView to container
-            container.addView(cardView)
-            Log.d(TAG, "Added review: $username - $feedback")
         }
     }
 
@@ -272,7 +266,7 @@ class ReminderSettingsActivity : AppCompatActivity() {
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            true // For versions below Android 13, no runtime permission needed
+            true
         }
     }
 
@@ -290,21 +284,36 @@ class ReminderSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveReminderTime(hour: Int, minute: Int) {
-        val prefs = getSharedPreferences("ReminderPrefs", Context.MODE_PRIVATE)
-        prefs.edit().putInt("hour", hour).putInt("minute", minute).apply()
+    private fun saveReminderTime(db: FinanceDatabase, username: String, hour: Int, minute: Int) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val pref = db.financeDao().getPreference(username) ?: Preference(username)
+                val updatedPref = pref.copy(reminderHour = hour, reminderMinute = minute)
+                db.financeDao().insertPreference(updatedPref)
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ReminderSettingsActivity, "Error saving reminder time: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
-    private fun loadSavedTime() {
-        val prefs = getSharedPreferences("ReminderPrefs", Context.MODE_PRIVATE)
-        val hour = prefs.getInt("hour", -1)
-        val minute = prefs.getInt("minute", -1)
-
-        if (hour != -1) {
-            tvTime.text = "Reminder set for: %02d:%02d".format(hour, minute)
-
-            if (hasNotificationPermission()) {
-                scheduleReminder(hour, minute)
+    private fun loadSavedTime(db: FinanceDatabase, username: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val pref = db.financeDao().getPreference(username)
+                withContext(Dispatchers.Main) {
+                    if (pref != null && pref.reminderHour != -1) {
+                        tvTime.text = "Reminder set for: %02d:%02d".format(pref.reminderHour, pref.reminderMinute)
+                        if (hasNotificationPermission()) {
+                            scheduleReminder(pref.reminderHour, pref.reminderMinute)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ReminderSettingsActivity, "Error loading reminder time: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -313,8 +322,6 @@ class ReminderSettingsActivity : AppCompatActivity() {
         try {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(this, ReminderReceiver::class.java)
-
-            // Use unique request code based on time to avoid conflicts
             val requestCode = (hour * 60 + minute)
 
             val pendingIntent = PendingIntent.getBroadcast(
@@ -324,7 +331,6 @@ class ReminderSettingsActivity : AppCompatActivity() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
-            // Cancel any existing alarms with the same ID
             alarmManager.cancel(pendingIntent)
 
             val calendar = Calendar.getInstance().apply {
@@ -337,7 +343,6 @@ class ReminderSettingsActivity : AppCompatActivity() {
                 }
             }
 
-            // Use EXACT scheduling where available
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
@@ -358,39 +363,77 @@ class ReminderSettingsActivity : AppCompatActivity() {
                     pendingIntent
                 )
             }
+            Log.d(TAG, "Reminder scheduled for $hour:$minute")
         } catch (e: Exception) {
+            Log.e(TAG, "Error scheduling reminder: ${e.message}")
             Toast.makeText(this, "Error setting reminder: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun exportTransactions() {
-        val prefs = getSharedPreferences("FinancePrefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("transactions", null)
+    private fun checkStoragePermissionAndExport() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // For Android 10+, MediaStore doesn't require storage permission
+            exportTransactions()
+        } else {
+            // For Android 9 and below, check WRITE_EXTERNAL_STORAGE permission
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                exportTransactions()
+            } else {
+                storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+    }
 
-        if (json == null) {
-            Toast.makeText(this, "No transactions to export", Toast.LENGTH_SHORT).show()
+    private fun exportTransactions() {
+        val userPrefs = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUser = userPrefs.getString("username", null)
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to export transactions", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
             return
         }
 
-        val fileName = "transactions_backup.json"
+        val db = FinanceDatabase.getDatabase(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val transactions = db.financeDao().getTransactionsByUser(currentUser)
+                val gson = Gson()
+                val json = gson.toJson(transactions)
+                withContext(Dispatchers.Main) {
+                    if (json.isEmpty() || transactions.isEmpty()) {
+                        Toast.makeText(this@ReminderSettingsActivity, "No transactions to export", Toast.LENGTH_SHORT).show()
+                        return@withContext
+                    }
 
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, "application/json")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-        }
+                    val fileName = "transactions_${currentUser}_backup.json"
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                        put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    }
 
-        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-
-        if (uri != null) {
-            val outputStream: OutputStream? = contentResolver.openOutputStream(uri)
-            outputStream?.use {
-                it.write(json.toByteArray())
-                it.flush()
-                Toast.makeText(this, "✅ Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        val outputStream: OutputStream? = contentResolver.openOutputStream(uri)
+                        outputStream?.use {
+                            it.write(json.toByteArray())
+                            it.flush()
+                            Toast.makeText(this@ReminderSettingsActivity, "✅ Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+                        } ?: run {
+                            Toast.makeText(this@ReminderSettingsActivity, "❌ Failed to export: Unable to open output stream", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(this@ReminderSettingsActivity, "❌ Failed to export: Unable to create file", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ReminderSettingsActivity, "Error exporting transactions: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
-        } else {
-            Toast.makeText(this, "❌ Failed to export", Toast.LENGTH_SHORT).show()
         }
     }
 
